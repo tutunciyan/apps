@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Azure DevOps Pull Requests</title>
+<link rel="stylesheet" href="main.css">
+</head>
+<body>
+
+<div id="patGate" class="hidden-section">
+  <h2>Azure DevOps Pull Requests</h2>
+  <p>Enter a Personal Access Token with <strong>Code (Read)</strong> scope for <code id="patOrgProjectLabel"></code>. It's used only to call the Azure DevOps REST API directly from this page.</p>
+  <label for="patInput">Personal Access Token</label>
+  <input type="password" id="patInput" autocomplete="off" placeholder="Paste your PAT here">
+  <label class="remember"><input type="checkbox" id="patRemember" checked> Remember for this browser tab session</label>
+  <button id="patSubmit">Load pull requests</button>
+  <div class="error" id="patError"></div>
+  <div class="hint-link"><br>Tip: you can also open this page with <code>?pat=YOUR_TOKEN</code> in the URL to skip this form.</div>
+</div>
+
+<div id="loadingPane" class="hidden-section">
+  <div class="status-text" id="loadingStatusText">Starting...</div>
+  <div class="progress-track"><div class="progress-fill" id="loadingProgressFill"></div></div>
+  <div class="sub-text" id="loadingSubText"></div>
+</div>
+
+<div id="reportRoot" class="hidden-section">
+  <div id="topBar">
+    <div>
+      <h1 id="pageTitle">Azure DevOps Pull Requests</h1>
+      <div class="meta" id="metaLine"></div>
+    </div>
+    <div class="actions">
+      <button id="refreshDataBtn" title="Re-fetch from Azure DevOps, bypassing the cache">Refresh data</button>
+      <button id="forgetPatBtn" title="Clear the cached PAT for this tab">Forget PAT</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="field"><label>Group by</label><div class="group-switch" id="groupSwitch">
+      <button type="button" data-group="Repository">Repository</button>
+      <button type="button" data-group="Team">Team</button>
+      <button type="button" data-group="None">None</button>
+    </div></div>
+    <div class="field"><label for="userFilter">User</label><select id="userFilter"><option value="">All users</option></select></div>
+    <div class="field"><label for="teamFilter">Team</label><select id="teamFilter"><option value="">All teams</option></select></div>
+    <div class="field"><label for="tagFilter">Work Item Tags</label><select id="tagFilter"><option value="">All tags</option></select></div>
+    <div class="field"><label for="wiTeamFilter">Work Item Team</label><select id="wiTeamFilter"><option value="">All work item teams</option></select></div>
+    <div class="field"><label for="draftFilter">Draft</label><select id="draftFilter">
+      <option value="">All PRs</option><option value="only">Draft only</option><option value="exclude">Exclude drafts</option>
+    </select></div>
+    <div class="field"><label for="approvalFilter" id="approvalFilterLabel">Approvals</label><select id="approvalFilter">
+      <option value="">All PRs</option><option value="with">With approvals</option><option value="without">Without approvals</option>
+    </select></div>
+    <button id="resetFilters">Reset</button>
+    <span class="count-badge" id="visibleCount"></span>
+  </div>
+
+  <div id="reportContainer"></div>
+</div>
+
+<script src="main.js"></script>
+</body>
+</html>

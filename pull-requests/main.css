@@ -1,0 +1,69 @@
+body { font-family: Segoe UI, Arial, sans-serif; margin: 20px; background:#f7f7f8; color:#1f1f1f; }
+h1 { font-size: 20px; }
+h2.repo { margin-top: 28px; padding: 6px 10px; background:#0078d4; color:#fff; border-radius:4px; font-size:15px; }
+table { border-collapse: collapse; width: 100%; margin-bottom: 10px; background:#fff; table-layout: fixed; max-width: 100%; }
+th, td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; text-align: left; font-size: 13px; vertical-align: top; }
+td { overflow: hidden; }
+td .cell-clip { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+th { background:#eef3f9; position: sticky; top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+tr:hover { background:#f0f6fc; }
+a.pr-link { color:#0078d4; text-decoration: none; font-weight: 600; }
+a.pr-link:hover { text-decoration: underline; }
+span.status { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color:#fff; }
+.status-Active { background:#0078d4; }
+.status-Completed { background:#107c10; }
+.status-Abandoned { background:#a80000; }
+.status-NotSet, .status-Unknown { background:#605e5c; }
+.draft { font-style: italic; color:#a80000; }
+.meta { color:#666; font-size:12px; margin-bottom:16px; }
+a.wi-link { display:inline-block; color:#0078d4; background:#eef3f9; border:1px solid #cfe2f3; border-radius:10px; padding:1px 8px; font-size:11px; text-decoration:none; margin:1px 2px 1px 0; }
+a.wi-link:hover { text-decoration:underline; }
+.wi-none { color:#999; font-size:12px; }
+span.tag { display:inline-block; color:#5c2d91; background:#f0ebf9; border:1px solid #dcd0f0; border-radius:10px; padding:1px 8px; font-size:11px; margin:1px 2px 1px 0; }
+.tag-none { color:#999; font-size:12px; }
+.more-badge { display:inline-block; color:#666; font-size:11px; font-weight:600; padding:1px 4px; }
+span.approval-pill { display:inline-block; color:#107c10; background:#e6f4e6; border:1px solid #c3e6c3; border-radius:10px; padding:1px 8px; font-size:11px; margin:1px 2px 1px 0; }
+.filters { position: sticky; top:0; z-index:5; background:#f7f7f8; padding: 12px 0 16px 0; border-bottom: 2px solid #e0e0e0; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
+.filters .field { display:flex; flex-direction:column; font-size:12px; }
+.filters label { font-weight:600; margin-bottom:4px; color:#333; }
+.filters select { padding:5px 8px; width:180px; max-width:180px; flex-shrink:0; border:1px solid #c8c8c8; border-radius:4px; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.filters button { padding:6px 14px; border:1px solid #c8c8c8; border-radius:4px; background:#fff; cursor:pointer; font-size:13px; }
+.filters label.disabled { color:#999; }
+.filters select:disabled { color:#999; background:#f0f0f0; cursor:not-allowed; }
+.filters button:hover { background:#eef3f9; }
+.count-badge { font-size:12px; color:#666; align-self:center; }
+.repo-group.hidden, tr.hidden { display:none; }
+.group-switch { display:inline-flex; border:1px solid #c8c8c8; border-radius:4px; overflow:hidden; }
+.group-switch button { padding:6px 14px; border:none; border-right:1px solid #c8c8c8; background:#fff; cursor:pointer; font-size:13px; }
+.group-switch button:last-child { border-right:none; }
+.group-switch button:hover { background:#eef3f9; }
+.group-switch button.active { background:#0078d4; color:#fff; font-weight:600; }
+th.sortable { cursor:pointer; user-select:none; }
+th.sortable:hover { background:#e0ebf7; }
+th.sortable .sort-arrow { display:inline-block; width:1em; color:#0078d4; }
+
+/* ---- PAT gate ---- */
+#patGate { max-width:480px; margin: 80px auto; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:28px; }
+#patGate h2 { margin-top:0; font-size:17px; }
+#patGate p { font-size:13px; color:#555; line-height:1.5; }
+#patGate label { display:block; font-weight:600; font-size:12px; margin-bottom:6px; color:#333; }
+#patGate input[type='password'], #patGate input[type='text'] { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #c8c8c8; border-radius:4px; font-size:13px; margin-bottom:6px; }
+#patGate .remember { display:flex; align-items:center; gap:6px; font-weight:normal; font-size:12px; color:#555; margin: 4px 0 14px 0; }
+#patGate .remember input { width:auto; margin:0; }
+#patGate button { padding:8px 16px; border:none; border-radius:4px; background:#0078d4; color:#fff; font-size:13px; cursor:pointer; }
+#patGate button:hover { background:#006cbe; }
+#patGate .error { color:#a80000; font-size:12px; margin-top:10px; white-space:pre-wrap; }
+#patGate .hint-link { font-size:12px; }
+
+/* ---- Loading / progress ---- */
+#loadingPane { max-width:480px; margin: 100px auto; text-align:center; }
+#loadingPane .status-text { font-size:13px; color:#555; margin-bottom:10px; }
+#loadingPane .progress-track { width:100%; height:10px; background:#e0e0e0; border-radius:6px; overflow:hidden; }
+#loadingPane .progress-fill { height:100%; width:0%; background:#0078d4; transition: width 0.2s ease; }
+#loadingPane .sub-text { font-size:11px; color:#999; margin-top:8px; }
+
+#topBar { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; }
+#topBar .actions { display:flex; gap:8px; align-items:center; }
+#topBar button { padding:6px 12px; border:1px solid #c8c8c8; border-radius:4px; background:#fff; cursor:pointer; font-size:12px; }
+#topBar button:hover { background:#eef3f9; }
+.hidden-section { display:none; }
