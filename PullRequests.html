@@ -1,0 +1,899 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Azure DevOps Pull Requests</title>
+<style>
+  body { font-family: Segoe UI, Arial, sans-serif; margin: 20px; background:#f7f7f8; color:#1f1f1f; }
+  h1 { font-size: 20px; }
+  h2.repo { margin-top: 28px; padding: 6px 10px; background:#0078d4; color:#fff; border-radius:4px; font-size:15px; }
+  table { border-collapse: collapse; width: 100%; margin-bottom: 10px; background:#fff; table-layout: fixed; max-width: 100%; }
+  th, td { padding: 6px 10px; border-bottom: 1px solid #e0e0e0; text-align: left; font-size: 13px; vertical-align: top; }
+  td { overflow: hidden; }
+  td .cell-clip { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  th { background:#eef3f9; position: sticky; top: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  tr:hover { background:#f0f6fc; }
+  a.pr-link { color:#0078d4; text-decoration: none; font-weight: 600; }
+  a.pr-link:hover { text-decoration: underline; }
+  span.status { padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; color:#fff; }
+  .status-Active { background:#0078d4; }
+  .status-Completed { background:#107c10; }
+  .status-Abandoned { background:#a80000; }
+  .status-NotSet, .status-Unknown { background:#605e5c; }
+  .draft { font-style: italic; color:#a80000; }
+  .meta { color:#666; font-size:12px; margin-bottom:16px; }
+  a.wi-link { display:inline-block; color:#0078d4; background:#eef3f9; border:1px solid #cfe2f3; border-radius:10px; padding:1px 8px; font-size:11px; text-decoration:none; margin:1px 2px 1px 0; }
+  a.wi-link:hover { text-decoration:underline; }
+  .wi-none { color:#999; font-size:12px; }
+  span.tag { display:inline-block; color:#5c2d91; background:#f0ebf9; border:1px solid #dcd0f0; border-radius:10px; padding:1px 8px; font-size:11px; margin:1px 2px 1px 0; }
+  .tag-none { color:#999; font-size:12px; }
+  .more-badge { display:inline-block; color:#666; font-size:11px; font-weight:600; padding:1px 4px; }
+  span.approval-pill { display:inline-block; color:#107c10; background:#e6f4e6; border:1px solid #c3e6c3; border-radius:10px; padding:1px 8px; font-size:11px; margin:1px 2px 1px 0; }
+  .filters { position: sticky; top:0; z-index:5; background:#f7f7f8; padding: 12px 0 16px 0; border-bottom: 2px solid #e0e0e0; display:flex; gap:16px; flex-wrap:wrap; align-items:flex-end; }
+  .filters .field { display:flex; flex-direction:column; font-size:12px; }
+  .filters label { font-weight:600; margin-bottom:4px; color:#333; }
+  .filters select { padding:5px 8px; width:180px; max-width:180px; flex-shrink:0; border:1px solid #c8c8c8; border-radius:4px; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .filters button { padding:6px 14px; border:1px solid #c8c8c8; border-radius:4px; background:#fff; cursor:pointer; font-size:13px; }
+  .filters label.disabled { color:#999; }
+  .filters select:disabled { color:#999; background:#f0f0f0; cursor:not-allowed; }
+  .filters button:hover { background:#eef3f9; }
+  .count-badge { font-size:12px; color:#666; align-self:center; }
+  .repo-group.hidden, tr.hidden { display:none; }
+  .group-switch { display:inline-flex; border:1px solid #c8c8c8; border-radius:4px; overflow:hidden; }
+  .group-switch button { padding:6px 14px; border:none; border-right:1px solid #c8c8c8; background:#fff; cursor:pointer; font-size:13px; }
+  .group-switch button:last-child { border-right:none; }
+  .group-switch button:hover { background:#eef3f9; }
+  .group-switch button.active { background:#0078d4; color:#fff; font-weight:600; }
+  th.sortable { cursor:pointer; user-select:none; }
+  th.sortable:hover { background:#e0ebf7; }
+  th.sortable .sort-arrow { display:inline-block; width:1em; color:#0078d4; }
+
+  /* ---- PAT gate ---- */
+  #patGate { max-width:480px; margin: 80px auto; background:#fff; border:1px solid #e0e0e0; border-radius:8px; padding:28px; }
+  #patGate h2 { margin-top:0; font-size:17px; }
+  #patGate p { font-size:13px; color:#555; line-height:1.5; }
+  #patGate label { display:block; font-weight:600; font-size:12px; margin-bottom:6px; color:#333; }
+  #patGate input[type='password'], #patGate input[type='text'] { width:100%; box-sizing:border-box; padding:8px 10px; border:1px solid #c8c8c8; border-radius:4px; font-size:13px; margin-bottom:6px; }
+  #patGate .remember { display:flex; align-items:center; gap:6px; font-weight:normal; font-size:12px; color:#555; margin: 4px 0 14px 0; }
+  #patGate .remember input { width:auto; margin:0; }
+  #patGate button { padding:8px 16px; border:none; border-radius:4px; background:#0078d4; color:#fff; font-size:13px; cursor:pointer; }
+  #patGate button:hover { background:#006cbe; }
+  #patGate .error { color:#a80000; font-size:12px; margin-top:10px; white-space:pre-wrap; }
+  #patGate .hint-link { font-size:12px; }
+
+  /* ---- Loading / progress ---- */
+  #loadingPane { max-width:480px; margin: 100px auto; text-align:center; }
+  #loadingPane .status-text { font-size:13px; color:#555; margin-bottom:10px; }
+  #loadingPane .progress-track { width:100%; height:10px; background:#e0e0e0; border-radius:6px; overflow:hidden; }
+  #loadingPane .progress-fill { height:100%; width:0%; background:#0078d4; transition: width 0.2s ease; }
+  #loadingPane .sub-text { font-size:11px; color:#999; margin-top:8px; }
+
+  #topBar { display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:8px; }
+  #topBar .actions { display:flex; gap:8px; align-items:center; }
+  #topBar button { padding:6px 12px; border:1px solid #c8c8c8; border-radius:4px; background:#fff; cursor:pointer; font-size:12px; }
+  #topBar button:hover { background:#eef3f9; }
+  .hidden-section { display:none; }
+</style>
+</head>
+<body>
+
+<div id="patGate" class="hidden-section">
+  <h2>Azure DevOps Pull Requests</h2>
+  <p>Enter a Personal Access Token with <strong>Code (Read)</strong> scope for <code id="patOrgProjectLabel"></code>. It's used only to call the Azure DevOps REST API directly from this page.</p>
+  <label for="patInput">Personal Access Token</label>
+  <input type="password" id="patInput" autocomplete="off" placeholder="Paste your PAT here">
+  <label class="remember"><input type="checkbox" id="patRemember" checked> Remember for this browser tab session</label>
+  <button id="patSubmit">Load pull requests</button>
+  <div class="error" id="patError"></div>
+  <div class="hint-link"><br>Tip: you can also open this page with <code>?pat=YOUR_TOKEN</code> in the URL to skip this form.</div>
+</div>
+
+<div id="loadingPane" class="hidden-section">
+  <div class="status-text" id="loadingStatusText">Starting...</div>
+  <div class="progress-track"><div class="progress-fill" id="loadingProgressFill"></div></div>
+  <div class="sub-text" id="loadingSubText"></div>
+</div>
+
+<div id="reportRoot" class="hidden-section">
+  <div id="topBar">
+    <div>
+      <h1 id="pageTitle">Azure DevOps Pull Requests</h1>
+      <div class="meta" id="metaLine"></div>
+    </div>
+    <div class="actions">
+      <button id="refreshDataBtn" title="Re-fetch from Azure DevOps, bypassing the cache">Refresh data</button>
+      <button id="forgetPatBtn" title="Clear the cached PAT for this tab">Forget PAT</button>
+    </div>
+  </div>
+
+  <div class="filters">
+    <div class="field"><label>Group by</label><div class="group-switch" id="groupSwitch">
+      <button type="button" data-group="Repository">Repository</button>
+      <button type="button" data-group="Team">Team</button>
+      <button type="button" data-group="None">None</button>
+    </div></div>
+    <div class="field"><label for="userFilter">User</label><select id="userFilter"><option value="">All users</option></select></div>
+    <div class="field"><label for="teamFilter">Team</label><select id="teamFilter"><option value="">All teams</option></select></div>
+    <div class="field"><label for="tagFilter">Work Item Tags</label><select id="tagFilter"><option value="">All tags</option></select></div>
+    <div class="field"><label for="wiTeamFilter">Work Item Team</label><select id="wiTeamFilter"><option value="">All work item teams</option></select></div>
+    <div class="field"><label for="draftFilter">Draft</label><select id="draftFilter">
+      <option value="">All PRs</option><option value="only">Draft only</option><option value="exclude">Exclude drafts</option>
+    </select></div>
+    <div class="field"><label for="approvalFilter" id="approvalFilterLabel">Approvals</label><select id="approvalFilter">
+      <option value="">All PRs</option><option value="with">With approvals</option><option value="without">Without approvals</option>
+    </select></div>
+    <button id="resetFilters">Reset</button>
+    <span class="count-badge" id="visibleCount"></span>
+  </div>
+
+  <div id="reportContainer"></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ==================== Configuration ====================
+  const qs = new URLSearchParams(window.location.search);
+  const CONFIG = {
+    organization: qs.get('organization') || 'SnelStart',
+    project: qs.get('project') || 'SnelStart',
+    status: (qs.get('status') || 'Active'),
+    groupBy: (qs.get('groupBy') || 'None'),
+    draft: (qs.get('draft') || 'All'),
+    workItemTeam: qs.get('workItemTeam') || '',
+  };
+  const VALID_STATUS = ['Active', 'Completed', 'Abandoned', 'All'];
+  const VALID_GROUPBY = ['Repository', 'Team', 'None'];
+  const VALID_DRAFT = ['All', 'Only', 'Exclude'];
+  if (!VALID_STATUS.includes(CONFIG.status)) CONFIG.status = 'Active';
+  if (!VALID_GROUPBY.includes(CONFIG.groupBy)) CONFIG.groupBy = 'None';
+  if (!VALID_DRAFT.includes(CONFIG.draft)) CONFIG.draft = 'All';
+
+  const CONCURRENCY_LIMIT = 10;
+  const PAT_STORAGE_KEY = 'azdo-pr-report-pat';
+  const DATA_CACHE_KEY = 'azdo-pr-report-cache:' + CONFIG.organization + '/' + CONFIG.project + '/' + CONFIG.status;
+
+  const patGateEl = document.getElementById('patGate');
+  const loadingPaneEl = document.getElementById('loadingPane');
+  const reportRootEl = document.getElementById('reportRoot');
+
+  function showOnly(el) {
+    [patGateEl, loadingPaneEl, reportRootEl].forEach(e => e.classList.toggle('hidden-section', e !== el));
+  }
+
+  // ==================== PAT gate ====================
+  document.getElementById('patOrgProjectLabel').textContent = CONFIG.organization + '/' + CONFIG.project;
+
+  // If a PAT was supplied via ?pat=, capture it into sessionStorage so it
+  // keeps working for the rest of this tab's session, then strip it from the
+  // URL/history immediately so it isn't left sitting in the address bar,
+  // browser history, or anywhere else the URL might get logged/shared.
+  function capturePatFromUrlIfPresent() {
+    const fromQs = qs.get('pat');
+    if (!fromQs) return;
+    try { sessionStorage.setItem(PAT_STORAGE_KEY, fromQs); } catch (e) { /* storage unavailable, ignore */ }
+    qs.delete('pat');
+    const newQuery = qs.toString();
+    const newUrl = window.location.pathname + (newQuery ? '?' + newQuery : '') + window.location.hash;
+    history.replaceState(null, '', newUrl);
+  }
+  capturePatFromUrlIfPresent();
+
+  function getPat() {
+    try { return sessionStorage.getItem(PAT_STORAGE_KEY) || null; } catch (e) { return null; }
+  }
+
+  function setPat(pat, remember) {
+    if (remember) {
+      try { sessionStorage.setItem(PAT_STORAGE_KEY, pat); } catch (e) { /* storage unavailable, ignore */ }
+    }
+  }
+
+  function forgetPat() {
+    try { sessionStorage.removeItem(PAT_STORAGE_KEY); } catch (e) { /* ignore */ }
+    try { sessionStorage.removeItem(DATA_CACHE_KEY); } catch (e) { /* ignore */ }
+    window.location.reload();
+  }
+
+  document.getElementById('patSubmit').addEventListener('click', () => {
+    const val = document.getElementById('patInput').value.trim();
+    const errEl = document.getElementById('patError');
+    errEl.textContent = '';
+    if (!val) {
+      errEl.textContent = 'Please enter a PAT.';
+      return;
+    }
+    setPat(val, document.getElementById('patRemember').checked);
+    startLoad(val, { forceRefresh: false });
+  });
+  document.getElementById('patInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('patSubmit').click();
+  });
+  document.getElementById('forgetPatBtn').addEventListener('click', forgetPat);
+
+  // ==================== Azure DevOps API ====================
+  function authHeader(pat) {
+    return { Authorization: 'Basic ' + btoa(':' + pat) };
+  }
+
+  async function apiGet(url, pat) {
+    const response = await fetch(url, { method: 'GET', headers: authHeader(pat) });
+    if (!response.ok) {
+      throw new Error('GET ' + url + ' failed: ' + response.status + ' ' + response.statusText);
+    }
+    return response.json();
+  }
+
+  async function apiPost(url, pat, body) {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: Object.assign({ 'Content-Type': 'application/json' }, authHeader(pat)),
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      throw new Error('POST ' + url + ' failed: ' + response.status + ' ' + response.statusText);
+    }
+    return response.json();
+  }
+
+  // Runs `items` through `worker` with at most `limit` in flight at once.
+  async function runWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+    let completed = 0;
+
+    async function runNext() {
+      while (true) {
+        const i = nextIndex++;
+        if (i >= items.length) return;
+        results[i] = await worker(items[i], i);
+        completed++;
+        if (typeof runWithConcurrency.onProgress === 'function') {
+          runWithConcurrency.onProgress(completed, items.length);
+        }
+      }
+    }
+
+    const workers = [];
+    for (let w = 0; w < Math.min(limit, items.length); w++) workers.push(runNext());
+    await Promise.all(workers);
+    return results;
+  }
+
+  async function fetchAllPullRequests(pat, onPage) {
+    const baseUri = 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_apis/git/pullrequests';
+    const top = 100;
+    let skip = 0;
+    const all = [];
+
+    while (true) {
+      const uri = baseUri + '?searchCriteria.status=' + CONFIG.status + '&$top=' + top + '&$skip=' + skip + '&api-version=7.1';
+      const response = await apiGet(uri, pat);
+      const page = response.value || [];
+      if (page.length === 0) break;
+      all.push.apply(all, page);
+      if (onPage) onPage(all.length);
+      if (page.length < top) break;
+      skip += top;
+    }
+    return all;
+  }
+
+  function statusText(statusCode) {
+    switch (String(statusCode).toLowerCase()) {
+      case 'active': return 'Active';
+      case 'abandoned': return 'Abandoned';
+      case 'completed': return 'Completed';
+      case 'notset': return 'NotSet';
+      default: return 'Unknown';
+    }
+  }
+
+  async function fetchLinkedWorkItemIds(pr, pat) {
+    const uri = 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project +
+      '/_apis/git/repositories/' + pr.repository.id + '/pullRequests/' + pr.pullRequestId + '/workitems?api-version=7.1';
+    try {
+      const response = await apiGet(uri, pat);
+      return (response.value || []).map(v => parseInt(v.id, 10));
+    } catch (e) {
+      return [];
+    }
+  }
+
+  async function fetchWorkItemDetailsBatch(ids, pat) {
+    const result = {};
+    if (ids.length === 0) return result;
+
+    const uri = 'https://dev.azure.com/' + CONFIG.organization + '/_apis/wit/workitemsbatch?api-version=7.1';
+
+    async function fetchBatch(batchIds) {
+      if (batchIds.length === 0) return;
+      const body = {
+        ids: batchIds,
+        fields: ['System.Id', 'System.Title', 'System.WorkItemType', 'System.State', 'System.AreaPath', 'System.Tags'],
+        errorPolicy: 'Omit',
+      };
+      try {
+        const response = await apiPost(uri, pat, body);
+        (response.value || []).forEach(wi => {
+          const areaPath = wi.fields['System.AreaPath'];
+          const team = areaPath ? areaPath.split('\\').pop() : null;
+          const tagsRaw = wi.fields['System.Tags'];
+          const tags = tagsRaw ? tagsRaw.split(';').map(t => t.trim()).filter(Boolean) : [];
+          result[wi.id] = {
+            id: wi.id,
+            title: wi.fields['System.Title'],
+            type: wi.fields['System.WorkItemType'],
+            team: team,
+            tags: tags,
+          };
+        });
+      } catch (e) {
+        if (batchIds.length <= 1) return;
+        const mid = Math.floor(batchIds.length / 2);
+        await fetchBatch(batchIds.slice(0, mid));
+        await fetchBatch(batchIds.slice(mid));
+      }
+    }
+
+    const batches = [];
+    for (let i = 0; i < ids.length; i += 200) batches.push(ids.slice(i, i + 200));
+    for (const batch of batches) await fetchBatch(batch);
+    return result;
+  }
+
+  // ==================== Loading orchestration ====================
+  function setLoadingProgress(pct, statusMsg, subMsg) {
+    document.getElementById('loadingProgressFill').style.width = Math.max(0, Math.min(100, pct)) + '%';
+    if (statusMsg !== undefined) document.getElementById('loadingStatusText').textContent = statusMsg;
+    if (subMsg !== undefined) document.getElementById('loadingSubText').textContent = subMsg;
+  }
+
+  function readCache() {
+    try {
+      const raw = sessionStorage.getItem(DATA_CACHE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function writeCache(prs) {
+    try {
+      sessionStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ fetchedAt: new Date().toISOString(), prs: prs }));
+    } catch (e) { /* storage full or unavailable, ignore */ }
+  }
+
+  async function loadPrData(pat) {
+    showOnly(loadingPaneEl);
+    setLoadingProgress(2, "Fetching '" + CONFIG.status + "' pull requests for " + CONFIG.organization + '/' + CONFIG.project + ' ...', '');
+
+    const rawPrs = await fetchAllPullRequests(pat, (count) => {
+      setLoadingProgress(15, 'Fetching pull requests ...', count + ' fetched so far');
+    });
+
+    if (rawPrs.length === 0) {
+      throw new Error('No pull requests found.');
+    }
+
+    setLoadingProgress(20, 'Fetching linked work items for ' + rawPrs.length + ' pull requests ...', '0 / ' + rawPrs.length);
+
+    const workItemIdsByPr = {};
+    runWithConcurrency.onProgress = (done, total) => {
+      const pct = 20 + Math.round((done / total) * 40); // 20% -> 60%
+      setLoadingProgress(pct, 'Fetching linked work items ...', done + ' / ' + total);
+    };
+    const refResults = await runWithConcurrency(rawPrs, CONCURRENCY_LIMIT, async (pr) => {
+      const ids = await fetchLinkedWorkItemIds(pr, pat);
+      return { pullRequestId: pr.pullRequestId, ids: ids };
+    });
+    runWithConcurrency.onProgress = null;
+    refResults.forEach(r => { workItemIdsByPr[r.pullRequestId] = r.ids; });
+
+    const allIdsSet = new Set();
+    Object.values(workItemIdsByPr).forEach(ids => ids.forEach(id => allIdsSet.add(id)));
+    const allIds = Array.from(allIdsSet);
+
+    setLoadingProgress(65, 'Resolving details for ' + allIds.length + ' unique work item(s) ...', '');
+    const workItemDetails = await fetchWorkItemDetailsBatch(allIds, pat);
+
+    setLoadingProgress(90, 'Building report ...', '');
+
+    const prs = rawPrs.map(pr => {
+      const teamReviewers = (pr.reviewers || []).filter(r => r.isContainer).map(r => r.displayName);
+      const approvers = (pr.reviewers || []).filter(r => !r.isContainer && r.vote >= 5).map(r => r.displayName);
+      const linkedIds = workItemIdsByPr[pr.pullRequestId] || [];
+      const linkedWorkItems = linkedIds.map(wiId => {
+        const detail = workItemDetails[wiId];
+        return {
+          id: wiId,
+          title: detail ? detail.title : '',
+          type: detail ? detail.type : '',
+          team: detail ? detail.team : null,
+          tags: detail ? detail.tags : [],
+          url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_workitems/edit/' + wiId,
+        };
+      });
+      const workItemTeams = Array.from(new Set(linkedWorkItems.map(wi => wi.team).filter(Boolean)));
+      const workItemTags = Array.from(new Set(linkedWorkItems.flatMap(wi => wi.tags || [])));
+
+      return {
+        repository: pr.repository.name,
+        id: pr.pullRequestId,
+        title: pr.title,
+        status: statusText(pr.status),
+        createdBy: pr.createdBy.displayName,
+        teams: teamReviewers,
+        approvers: approvers,
+        tags: workItemTags,
+        workItems: linkedWorkItems.map(wi => ({ id: wi.id, title: wi.title, type: wi.type, url: wi.url })),
+        wiTeams: workItemTeams,
+        created: formatDate(new Date(pr.creationDate)),
+        isDraft: !!pr.isDraft,
+        url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_git/' +
+          encodeURIComponent(pr.repository.name) + '/pullrequest/' + pr.pullRequestId,
+      };
+    });
+
+    setLoadingProgress(100, 'Done.', '');
+    return prs;
+  }
+
+  function formatDate(d) {
+    const pad = (n) => String(n).padStart(2, '0');
+    return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+  }
+
+  async function startLoad(pat, opts) {
+    opts = opts || {};
+    const errEl = document.getElementById('patError');
+    errEl.textContent = '';
+
+    try {
+      let prs = null;
+      if (!opts.forceRefresh) {
+        const cached = readCache();
+        if (cached && Array.isArray(cached.prs)) {
+          prs = cached.prs;
+        }
+      }
+
+      if (!prs) {
+        prs = await loadPrData(pat);
+        writeCache(prs);
+      }
+
+      renderReport(prs);
+      showOnly(reportRootEl);
+    } catch (err) {
+      showOnly(patGateEl);
+      document.getElementById('patError').textContent = 'Failed to load pull requests:\n' + err.message +
+        '\n\nCheck that the PAT is valid and has "Code (Read)" scope.';
+    }
+  }
+
+  document.getElementById('refreshDataBtn').addEventListener('click', () => {
+    const pat = getPat();
+    if (!pat) { showOnly(patGateEl); return; }
+    startLoad(pat, { forceRefresh: true });
+  });
+
+  // ==================== Report rendering (grouping / sorting / filters) ====================
+  function renderReport(prs) {
+    document.getElementById('pageTitle').textContent = 'Azure DevOps Pull Requests - ' + CONFIG.organization + '/' + CONFIG.project;
+    document.getElementById('metaLine').textContent =
+      'Server filter: ' + CONFIG.status + ' | Total fetched: ' + prs.length;
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    const colgroup = "<colgroup><col style='width:5%'><col style='width:21%'><col style='width:7%'><col style='width:10%'><col style='width:11%'><col style='width:12%'><col style='width:12%'><col style='width:10%'><col style='width:12%'></colgroup>";
+
+    // CSS text-overflow:ellipsis isn't guaranteed to render "..." when the
+    // clipped content is an inline-block pill rather than a text run, so
+    // pill-based cells cap the item count themselves and show a "+N" badge.
+    const MAX_VISIBLE_PILLS = 3;
+
+    function renderTags(tags) {
+      if (!tags || tags.length === 0) return "<span class='tag-none'>-</span>";
+      const visible = tags.slice(0, MAX_VISIBLE_PILLS);
+      let html = visible.map(t => "<span class='tag'>" + esc(t) + "</span>").join(" ");
+      if (tags.length > MAX_VISIBLE_PILLS) {
+        html += " <span class='more-badge'>+" + (tags.length - MAX_VISIBLE_PILLS) + "</span>";
+      }
+      return html;
+    }
+
+    function renderWorkItems(items) {
+      if (!items || items.length === 0) return "<span class='wi-none'>-</span>";
+      const visible = items.slice(0, MAX_VISIBLE_PILLS);
+      let html = visible.map(wi => {
+        const tooltip = wi.title ? (wi.type + ": " + wi.title) : wi.type;
+        return "<a class='wi-link' href='" + wi.url + "' target='_blank' title='" + esc(tooltip) + "'>#" + wi.id + "</a>";
+      }).join(" ");
+      if (items.length > MAX_VISIBLE_PILLS) {
+        html += " <span class='more-badge'>+" + (items.length - MAX_VISIBLE_PILLS) + "</span>";
+      }
+      return html;
+    }
+
+    function renderApprovals(approvers) {
+      if (!approvers || approvers.length === 0) return "<span class='wi-none'>-</span>";
+      const visible = approvers.slice(0, MAX_VISIBLE_PILLS);
+      let html = visible.map(name => "<span class='approval-pill'>&#10003; " + esc(name) + "</span>").join(" ");
+      if (approvers.length > MAX_VISIBLE_PILLS) {
+        html += " <span class='more-badge'>+" + (approvers.length - MAX_VISIBLE_PILLS) + "</span>";
+      }
+      return html;
+    }
+
+    // Wraps cell content in a block-level span so overflow:hidden +
+    // text-overflow:ellipsis truncates it to a single line regardless of how
+    // many inline children (links, pills) it contains, with the full text
+    // available as a tooltip.
+    function clipCell(innerHtml, tooltipText) {
+      const titleAttr = tooltipText ? " title='" + esc(tooltipText) + "'" : "";
+      return "<span class='cell-clip'" + titleAttr + ">" + innerHtml + "</span>";
+    }
+
+    function groupKeysFor(pr, groupBy) {
+      if (groupBy === 'Team') {
+        return pr.teams && pr.teams.length > 0 ? pr.teams : ['Unassigned'];
+      }
+      if (groupBy === 'Repository') {
+        return [pr.repository];
+      }
+      return ['All Pull Requests'];
+    }
+
+    function fifthColumnLabel(groupBy) {
+      return groupBy === 'Team' ? 'Repository' : 'Team';
+    }
+
+    function fifthColumnValue(pr, groupBy) {
+      if (groupBy === 'Team') return pr.repository;
+      return (pr.teams && pr.teams.length > 0) ? pr.teams.join(', ') : '-';
+    }
+
+    // Column specs drive both the header row and click-to-sort behavior.
+    // sortValue(pr) returns the raw comparable value for a given row; type
+    // controls whether comparison is numeric or string-based.
+    function getColumns(groupBy) {
+      return [
+        { key: 'id', label: 'Id', type: 'number', sortValue: pr => pr.id },
+        { key: 'title', label: 'Title', type: 'string', sortValue: pr => pr.title || '' },
+        { key: 'status', label: 'Status', type: 'string', sortValue: pr => pr.status || '' },
+        { key: 'createdBy', label: 'Created By', type: 'string', sortValue: pr => pr.createdBy || '' },
+        { key: 'fifth', label: fifthColumnLabel(groupBy), type: 'string', sortValue: pr => fifthColumnValue(pr, groupBy) },
+        { key: 'tags', label: 'Work Item Tags', type: 'string', sortValue: pr => (pr.tags || []).join(', ') },
+        { key: 'workItems', label: 'Work Items', type: 'number', sortValue: pr => (pr.workItems || []).length },
+        { key: 'approvals', label: 'Approvals', type: 'number', sortValue: pr => (pr.approvers || []).length },
+        { key: 'created', label: 'Created', type: 'string', sortValue: pr => pr.created || '' },
+      ];
+    }
+
+    function renderRow(pr, groupBy) {
+      const draftTag = pr.isDraft ? " <span class='draft'>[Draft]</span>" : "";
+      const teamsJoined = (pr.teams || []).join('|');
+      const tagsJoined = (pr.tags || []).join('|');
+      const wiTeamsJoined = (pr.wiTeams || []).join('|');
+      const fifthVal = fifthColumnValue(pr, groupBy);
+      const hasApprovals = (pr.approvers || []).length > 0;
+      let row = "<tr data-user='" + esc(pr.createdBy) + "' data-status='" + esc(pr.status) + "' data-teams='" + esc(teamsJoined) + "' data-tags='" + esc(tagsJoined) + "' data-witeams='" + esc(wiTeamsJoined) + "' data-draft='" + (pr.isDraft ? "1" : "0") + "' data-approved='" + (hasApprovals ? "1" : "0") + "'>";
+      row += "<td>" + clipCell(pr.id) + "</td>";
+      row += "<td>" + clipCell("<a class='pr-link' href='" + pr.url + "' target='_blank'>" + esc(pr.title) + "</a>" + draftTag, pr.title) + "</td>";
+      row += "<td>" + clipCell("<span class='status status-" + pr.status + "'>" + esc(pr.status) + "</span>") + "</td>";
+      row += "<td>" + clipCell(esc(pr.createdBy), pr.createdBy) + "</td>";
+      row += "<td>" + clipCell(esc(fifthVal), fifthVal) + "</td>";
+      row += "<td>" + clipCell(renderTags(pr.tags), (pr.tags || []).join(', ')) + "</td>";
+      row += "<td>" + clipCell(renderWorkItems(pr.workItems)) + "</td>";
+      row += "<td>" + clipCell(renderApprovals(pr.approvers), (pr.approvers || []).join(', ')) + "</td>";
+      row += "<td>" + clipCell(pr.created) + "</td>";
+      row += "</tr>";
+      return row;
+    }
+
+    function renderHeaderRow(groupBy, sort) {
+      const columns = getColumns(groupBy);
+      let html = '<tr>';
+      columns.forEach(col => {
+        const isActive = sort.key === col.key;
+        const arrow = isActive ? (sort.dir === 'asc' ? '&#9650;' : '&#9660;') : '';
+        html += "<th class='sortable' data-sort-key='" + col.key + "'>" + esc(col.label) + " <span class='sort-arrow'>" + arrow + "</span></th>";
+      });
+      html += '</tr>';
+      return html;
+    }
+
+    function sortPrs(list, groupBy, sort) {
+      const columns = getColumns(groupBy);
+      const col = columns.find(c => c.key === sort.key) || columns[columns.length - 1];
+      const dir = sort.dir === 'asc' ? 1 : -1;
+      return list.slice().sort((a, b) => {
+        const va = col.sortValue(a);
+        const vb = col.sortValue(b);
+        if (col.type === 'number') return (va - vb) * dir;
+        return String(va).localeCompare(String(vb)) * dir;
+      });
+    }
+
+    function render(groupBy, sort) {
+      const container = document.getElementById('reportContainer');
+      const groups = new Map();
+
+      prs.forEach(pr => {
+        groupKeysFor(pr, groupBy).forEach(key => {
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(pr);
+        });
+      });
+
+      const sortedKeys = Array.from(groups.keys()).sort((a, b) => a.localeCompare(b));
+
+      let html = '';
+      sortedKeys.forEach(key => {
+        const groupPrs = sortPrs(groups.get(key), groupBy, sort);
+        html += "<div class='repo-group' data-repo='" + esc(key) + "'>";
+        html += "<h2 class='repo'>" + esc(key) + " (<span class='repo-count'>" + groupPrs.length + "</span>)</h2>";
+        html += "<table>" + colgroup + renderHeaderRow(groupBy, sort);
+        groupPrs.forEach(pr => { html += renderRow(pr, groupBy); });
+        html += "</table></div>";
+      });
+
+      container.innerHTML = html;
+
+      container.querySelectorAll('th.sortable').forEach(th => {
+        th.addEventListener('click', () => {
+          const key = th.getAttribute('data-sort-key');
+          if (currentSort.key === key) {
+            currentSort.dir = currentSort.dir === 'asc' ? 'desc' : 'asc';
+          } else {
+            currentSort.key = key;
+            currentSort.dir = 'asc';
+          }
+          render(currentGroupBy, currentSort);
+          applyFilters();
+          syncUrlToState();
+        });
+      });
+    }
+
+    const userFilter = document.getElementById('userFilter');
+    const teamFilter = document.getElementById('teamFilter');
+    const tagFilter = document.getElementById('tagFilter');
+    const wiTeamFilter = document.getElementById('wiTeamFilter');
+    const draftFilter = document.getElementById('draftFilter');
+    const approvalFilter = document.getElementById('approvalFilter');
+    const approvalFilterLabel = document.getElementById('approvalFilterLabel');
+    const resetBtn = document.getElementById('resetFilters');
+    const visibleCountEl = document.getElementById('visibleCount');
+    const groupSwitch = document.getElementById('groupSwitch');
+
+    // ---- URL <-> filter/sort/group state sync, so any selection can be bookmarked ----
+    const VALID_SORT_KEYS = ['id', 'title', 'status', 'createdBy', 'fifth', 'tags', 'workItems', 'approvals', 'created'];
+    const DRAFT_QS_TO_DROPDOWN = { All: '', Only: 'only', Exclude: 'exclude' };
+    const DRAFT_DROPDOWN_TO_QS = { '': 'All', only: 'Only', exclude: 'Exclude' };
+
+    function readInitialStateFromUrl() {
+      const urlSort = qs.get('sort');
+      const urlSortDir = qs.get('sortDir');
+      return {
+        groupBy: VALID_GROUPBY.includes(CONFIG.groupBy) ? CONFIG.groupBy : 'None',
+        sort: {
+          key: VALID_SORT_KEYS.includes(urlSort) ? urlSort : 'created',
+          dir: urlSortDir === 'asc' ? 'asc' : 'desc',
+        },
+        user: qs.get('user') || '',
+        team: qs.get('team') || '',
+        tag: qs.get('tag') || '',
+        wiTeam: CONFIG.workItemTeam || '',
+        draft: Object.prototype.hasOwnProperty.call(DRAFT_QS_TO_DROPDOWN, CONFIG.draft) ? DRAFT_QS_TO_DROPDOWN[CONFIG.draft] : '',
+        approval: (qs.get('approval') === 'with' || qs.get('approval') === 'without') ? qs.get('approval') : '',
+      };
+    }
+
+    const initialState = readInitialStateFromUrl();
+    let currentGroupBy = initialState.groupBy;
+    let currentSort = initialState.sort;
+
+    // Reflects the live filter/sort/group selection into the URL querystring
+    // via replaceState, so the current view (not just the page) can be
+    // bookmarked or shared without adding a new browser history entry per click.
+    function syncUrlToState() {
+      const params = new URLSearchParams(window.location.search);
+      const setOrDelete = (key, val) => { if (val) params.set(key, val); else params.delete(key); };
+
+      setOrDelete('groupBy', currentGroupBy !== 'None' ? currentGroupBy : '');
+      setOrDelete('sort', currentSort.key !== 'created' ? currentSort.key : '');
+      setOrDelete('sortDir', currentSort.dir !== 'desc' ? currentSort.dir : '');
+      setOrDelete('user', userFilter.value);
+      setOrDelete('team', teamFilter.value);
+      setOrDelete('tag', tagFilter.value);
+      setOrDelete('workItemTeam', wiTeamFilter.value);
+      setOrDelete('draft', DRAFT_DROPDOWN_TO_QS[draftFilter.value] !== 'All' ? DRAFT_DROPDOWN_TO_QS[draftFilter.value] : '');
+      setOrDelete('approval', approvalFilter.value);
+
+      const newQuery = params.toString();
+      const newUrl = window.location.pathname + (newQuery ? '?' + newQuery : '') + window.location.hash;
+      history.replaceState(null, '', newUrl);
+    }
+
+    function rowFacets(row) {
+      return {
+        user: row.getAttribute('data-user'),
+        teams: (row.getAttribute('data-teams') || '').split('|').filter(Boolean),
+        tags: (row.getAttribute('data-tags') || '').split('|').filter(Boolean),
+        wiTeams: (row.getAttribute('data-witeams') || '').split('|').filter(Boolean),
+        isDraft: row.getAttribute('data-draft') === '1',
+        isApproved: row.getAttribute('data-approved') === '1',
+      };
+    }
+
+    // Each filter's own match check, keyed the same as filterVals below, so
+    // matchesAllExcept() can skip exactly one filter when narrowing its options.
+    // approval is skipped entirely (treated as "no filter") while Draft is set
+    // to "Only", since draft PRs are rarely approved and the dropdown is
+    // disabled in that state. Draft "Exclude" still allows approval filtering.
+    const filterMatchers = {
+      user: (f, v) => !v || f.user === v,
+      team: (f, v) => !v || f.teams.includes(v),
+      tag: (f, v) => !v || f.tags.includes(v),
+      wiTeam: (f, v) => !v || f.wiTeams.includes(v),
+      draft: (f, v) => !v || (v === 'only' ? f.isDraft : !f.isDraft),
+      approval: (f, v, allVals) => !v || allVals.draft === 'only' || (v === 'with' ? f.isApproved : !f.isApproved),
+    };
+
+    function matchesAllExcept(facets, filterVals, exceptKey) {
+      return Object.keys(filterMatchers).every(key => {
+        if (key === exceptKey) return true;
+        return filterMatchers[key](facets, filterVals[key], filterVals);
+      });
+    }
+
+    // Rebuilds a <select>'s options to only the values still reachable when
+    // every OTHER active filter is applied (its own filter is ignored so the
+    // user can still broaden back out from the same dropdown).
+    function narrowSelectOptions(selectEl, allFacets, filterVals, key, valueExtractor, currentValueLabel) {
+      const reachable = new Set();
+      allFacets.forEach(facets => {
+        if (!matchesAllExcept(facets, filterVals, key)) return;
+        valueExtractor(facets).forEach(v => reachable.add(v));
+      });
+
+      const currentVal = selectEl.value;
+      const sortedVals = Array.from(reachable).sort((a, b) => a.localeCompare(b));
+
+      let html = "<option value=''>" + currentValueLabel + "</option>";
+      sortedVals.forEach(v => { html += "<option value='" + esc(v) + "'>" + esc(v) + "</option>"; });
+      selectEl.innerHTML = html;
+
+      // Keep the current selection even if it just fell out of the reachable
+      // set, so the user's active filter isn't silently reset out from under them.
+      if (currentVal && !sortedVals.includes(currentVal)) {
+        const opt = document.createElement('option');
+        opt.value = currentVal;
+        opt.textContent = currentVal;
+        selectEl.appendChild(opt);
+      }
+      selectEl.value = currentVal;
+    }
+
+    // The approval filter doesn't make sense combined with Draft="Only"
+    // (drafts are rarely approved), so it's disabled and reset to "All PRs"
+    // only in that case. Draft="Exclude" (or "All PRs") still allows filtering
+    // by approval.
+    function updateApprovalFilterAvailability() {
+      const draftOnly = draftFilter.value === 'only';
+      approvalFilter.disabled = draftOnly;
+      if (approvalFilterLabel) { approvalFilterLabel.classList.toggle('disabled', draftOnly); }
+      if (draftOnly) { approvalFilter.value = ''; }
+    }
+
+    function applyFilters() {
+      updateApprovalFilterAvailability();
+      const filterVals = {
+        user: userFilter.value,
+        team: teamFilter.value,
+        tag: tagFilter.value,
+        wiTeam: wiTeamFilter.value,
+        draft: draftFilter.value,
+        approval: approvalFilter.value,
+      };
+      let visibleTotal = 0;
+      const allFacets = [];
+
+      document.querySelectorAll('.repo-group').forEach(group => {
+        let visibleInGroup = 0;
+        group.querySelectorAll('tr[data-user]').forEach(row => {
+          const facets = rowFacets(row);
+          allFacets.push(facets);
+
+          const show = matchesAllExcept(facets, filterVals, null);
+          row.classList.toggle('hidden', !show);
+          if (show) { visibleInGroup++; visibleTotal++; }
+        });
+        group.classList.toggle('hidden', visibleInGroup === 0);
+        const countEl = group.querySelector('.repo-count');
+        if (countEl) { countEl.textContent = visibleInGroup; }
+      });
+
+      visibleCountEl.textContent = visibleTotal + ' pull request(s) shown';
+
+      narrowSelectOptions(userFilter, allFacets, filterVals, 'user', f => [f.user].filter(Boolean), 'All users');
+      narrowSelectOptions(teamFilter, allFacets, filterVals, 'team', f => f.teams, 'All teams');
+      narrowSelectOptions(tagFilter, allFacets, filterVals, 'tag', f => f.tags, 'All tags');
+      narrowSelectOptions(wiTeamFilter, allFacets, filterVals, 'wiTeam', f => f.wiTeams, 'All work item teams');
+    }
+
+    function setGroupBy(groupBy) {
+      currentGroupBy = groupBy;
+      render(groupBy, currentSort);
+      groupSwitch.querySelectorAll('button').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-group') === groupBy);
+      });
+      applyFilters();
+      syncUrlToState();
+    }
+
+    groupSwitch.querySelectorAll('button').forEach(btn => {
+      btn.addEventListener('click', () => setGroupBy(btn.getAttribute('data-group')));
+    });
+
+    function onFilterChange() {
+      applyFilters();
+      syncUrlToState();
+    }
+
+    userFilter.addEventListener('change', onFilterChange);
+    teamFilter.addEventListener('change', onFilterChange);
+    tagFilter.addEventListener('change', onFilterChange);
+    wiTeamFilter.addEventListener('change', onFilterChange);
+    draftFilter.addEventListener('change', onFilterChange);
+    approvalFilter.addEventListener('change', onFilterChange);
+    resetBtn.addEventListener('click', () => {
+      userFilter.value = '';
+      teamFilter.value = '';
+      tagFilter.value = '';
+      wiTeamFilter.value = '';
+      draftFilter.value = '';
+      approvalFilter.value = '';
+      applyFilters();
+      syncUrlToState();
+    });
+
+    // Seed each filter's initial value (from the URL, or CONFIG.workItemTeam
+    // as the fallback default for Work Item Team) as a pre-selected <option>
+    // before the first narrowSelectOptions rebuild, so it's active on first
+    // render even though the real option list isn't built from data yet.
+    function seedSelectValue(selectEl, value, placeholderLabel) {
+      if (!value) return;
+      selectEl.innerHTML = "<option value=''>" + placeholderLabel + "</option><option value='" + esc(value) + "' selected>" + esc(value) + "</option>";
+    }
+    seedSelectValue(userFilter, initialState.user, 'All users');
+    seedSelectValue(teamFilter, initialState.team, 'All teams');
+    seedSelectValue(tagFilter, initialState.tag, 'All tags');
+    seedSelectValue(wiTeamFilter, initialState.wiTeam, 'All work item teams');
+    if (initialState.draft) draftFilter.value = initialState.draft;
+    if (initialState.approval) approvalFilter.value = initialState.approval;
+
+    setGroupBy(currentGroupBy);
+  }
+
+  // ==================== Entry point ====================
+  (function init() {
+    const pat = getPat();
+    if (pat) {
+      startLoad(pat, { forceRefresh: false });
+    } else {
+      showOnly(patGateEl);
+    }
+  })();
+})();
+</script>
+</body>
+</html>
