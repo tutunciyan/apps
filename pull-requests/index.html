@@ -52,6 +52,9 @@
     <div class="field"><label for="approvalFilter" id="approvalFilterLabel">Approvals</label><select id="approvalFilter">
       <option value="">All PRs</option><option value="with">With approvals</option><option value="without">Without approvals</option>
     </select></div>
+    <div class="field"><label for="ageFilter">Age</label><select id="ageFilter">
+      <option value="recent" selected>Last 3 months</option><option value="older">Older than 3 months</option><option value="">All PRs</option>
+    </select></div>
     <button id="resetFilters">Reset</button>
     <span class="count-badge" id="visibleCount"></span>
   </div>

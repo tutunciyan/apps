@@ -10,13 +10,17 @@
     groupBy: (qs.get('groupBy') || 'None'),
     draft: (qs.get('draft') || 'All'),
     workItemTeam: qs.get('workItemTeam') || '',
+    // Default view is scoped to recent PRs; pass ?age=All (or Older) to see further back.
+    age: (qs.get('age') || 'Recent'),
   };
   const VALID_STATUS = ['Active', 'Completed', 'Abandoned', 'All'];
   const VALID_GROUPBY = ['Repository', 'Team', 'None'];
   const VALID_DRAFT = ['All', 'Only', 'Exclude'];
+  const VALID_AGE = ['Recent', 'Older', 'All'];
   if (!VALID_STATUS.includes(CONFIG.status)) CONFIG.status = 'Active';
   if (!VALID_GROUPBY.includes(CONFIG.groupBy)) CONFIG.groupBy = 'None';
   if (!VALID_DRAFT.includes(CONFIG.draft)) CONFIG.draft = 'All';
+  if (!VALID_AGE.includes(CONFIG.age)) CONFIG.age = 'Recent';
 
   const CONCURRENCY_LIMIT = 10;
   const PAT_STORAGE_KEY = 'azdo-pr-report-pat';
@@ -299,6 +303,7 @@
         workItems: linkedWorkItems.map(wi => ({ id: wi.id, title: wi.title, type: wi.type, url: wi.url })),
         wiTeams: workItemTeams,
         created: formatDate(new Date(pr.creationDate)),
+        createdTs: new Date(pr.creationDate).getTime(),
         isDraft: !!pr.isDraft,
         url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_git/' +
           encodeURIComponent(pr.repository.name) + '/pullrequest/' + pr.pullRequestId,
@@ -313,6 +318,14 @@
     const pad = (n) => String(n).padStart(2, '0');
     return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
   }
+
+  // Computed once at load time; "recent" means created on/after this timestamp.
+  function monthsAgoTs(n) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - n);
+    return d.getTime();
+  }
+  const RECENT_THRESHOLD_TS = monthsAgoTs(3);
 
   async function startLoad(pat, opts) {
     opts = opts || {};
@@ -452,7 +465,7 @@
       const wiTeamsJoined = (pr.wiTeams || []).join('|');
       const fifthVal = fifthColumnValue(pr, groupBy);
       const hasApprovals = (pr.approvers || []).length > 0;
-      let row = "<tr data-user='" + esc(pr.createdBy) + "' data-status='" + esc(pr.status) + "' data-teams='" + esc(teamsJoined) + "' data-tags='" + esc(tagsJoined) + "' data-witeams='" + esc(wiTeamsJoined) + "' data-draft='" + (pr.isDraft ? "1" : "0") + "' data-approved='" + (hasApprovals ? "1" : "0") + "'>";
+      let row = "<tr data-user='" + esc(pr.createdBy) + "' data-status='" + esc(pr.status) + "' data-teams='" + esc(teamsJoined) + "' data-tags='" + esc(tagsJoined) + "' data-witeams='" + esc(wiTeamsJoined) + "' data-draft='" + (pr.isDraft ? "1" : "0") + "' data-approved='" + (hasApprovals ? "1" : "0") + "' data-created-ts='" + pr.createdTs + "'>";
       row += "<td>" + clipCell(pr.id) + "</td>";
       row += "<td>" + clipCell("<a class='pr-link' href='" + pr.url + "' target='_blank'>" + esc(pr.title) + "</a>" + draftTag, pr.title) + "</td>";
       row += "<td>" + clipCell("<span class='status status-" + pr.status + "'>" + esc(pr.status) + "</span>") + "</td>";
@@ -537,6 +550,7 @@
     const wiTeamFilter = document.getElementById('wiTeamFilter');
     const draftFilter = document.getElementById('draftFilter');
     const approvalFilter = document.getElementById('approvalFilter');
+    const ageFilter = document.getElementById('ageFilter');
     const approvalFilterLabel = document.getElementById('approvalFilterLabel');
     const resetBtn = document.getElementById('resetFilters');
     const visibleCountEl = document.getElementById('visibleCount');
@@ -546,6 +560,8 @@
     const VALID_SORT_KEYS = ['id', 'title', 'status', 'createdBy', 'fifth', 'tags', 'workItems', 'approvals', 'created'];
     const DRAFT_QS_TO_DROPDOWN = { All: '', Only: 'only', Exclude: 'exclude' };
     const DRAFT_DROPDOWN_TO_QS = { '': 'All', only: 'Only', exclude: 'Exclude' };
+    const AGE_QS_TO_DROPDOWN = { Recent: 'recent', Older: 'older', All: '' };
+    const AGE_DROPDOWN_TO_QS = { recent: 'Recent', older: 'Older', '': 'All' };
 
     function readInitialStateFromUrl() {
       const urlSort = qs.get('sort');
@@ -562,6 +578,7 @@
         wiTeam: CONFIG.workItemTeam || '',
         draft: Object.prototype.hasOwnProperty.call(DRAFT_QS_TO_DROPDOWN, CONFIG.draft) ? DRAFT_QS_TO_DROPDOWN[CONFIG.draft] : '',
         approval: (qs.get('approval') === 'with' || qs.get('approval') === 'without') ? qs.get('approval') : '',
+        age: Object.prototype.hasOwnProperty.call(AGE_QS_TO_DROPDOWN, CONFIG.age) ? AGE_QS_TO_DROPDOWN[CONFIG.age] : 'recent',
       };
     }
 
@@ -585,6 +602,7 @@
       setOrDelete('workItemTeam', wiTeamFilter.value);
       setOrDelete('draft', DRAFT_DROPDOWN_TO_QS[draftFilter.value] !== 'All' ? DRAFT_DROPDOWN_TO_QS[draftFilter.value] : '');
       setOrDelete('approval', approvalFilter.value);
+      setOrDelete('age', AGE_DROPDOWN_TO_QS[ageFilter.value] !== 'Recent' ? AGE_DROPDOWN_TO_QS[ageFilter.value] : '');
 
       const newQuery = params.toString();
       const newUrl = window.location.pathname + (newQuery ? '?' + newQuery : '') + window.location.hash;
@@ -599,6 +617,7 @@
         wiTeams: (row.getAttribute('data-witeams') || '').split('|').filter(Boolean),
         isDraft: row.getAttribute('data-draft') === '1',
         isApproved: row.getAttribute('data-approved') === '1',
+        isRecent: Number(row.getAttribute('data-created-ts')) >= RECENT_THRESHOLD_TS,
       };
     }
 
@@ -614,6 +633,7 @@
       wiTeam: (f, v) => !v || f.wiTeams.includes(v),
       draft: (f, v) => !v || (v === 'only' ? f.isDraft : !f.isDraft),
       approval: (f, v, allVals) => !v || allVals.draft === 'only' || (v === 'with' ? f.isApproved : !f.isApproved),
+      age: (f, v) => !v || (v === 'recent' ? f.isRecent : !f.isRecent),
     };
 
     function matchesAllExcept(facets, filterVals, exceptKey) {
@@ -671,6 +691,7 @@
         wiTeam: wiTeamFilter.value,
         draft: draftFilter.value,
         approval: approvalFilter.value,
+        age: ageFilter.value,
       };
       let visibleTotal = 0;
       const allFacets = [];
@@ -723,6 +744,7 @@
     wiTeamFilter.addEventListener('change', onFilterChange);
     draftFilter.addEventListener('change', onFilterChange);
     approvalFilter.addEventListener('change', onFilterChange);
+    ageFilter.addEventListener('change', onFilterChange);
     resetBtn.addEventListener('click', () => {
       userFilter.value = '';
       teamFilter.value = '';
@@ -730,6 +752,7 @@
       wiTeamFilter.value = '';
       draftFilter.value = '';
       approvalFilter.value = '';
+      ageFilter.value = 'recent';
       applyFilters();
       syncUrlToState();
     });
@@ -748,6 +771,10 @@
     seedSelectValue(wiTeamFilter, initialState.wiTeam, 'All work item teams');
     if (initialState.draft) draftFilter.value = initialState.draft;
     if (initialState.approval) approvalFilter.value = initialState.approval;
+    // Unconditional: the default ('recent') differs from the empty/"All" value
+    // other filters default to, so an explicit "All" (empty string) must still
+    // override whatever the static HTML option has marked as selected.
+    ageFilter.value = initialState.age;
 
     setGroupBy(currentGroupBy);
   }
