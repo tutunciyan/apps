@@ -3,9 +3,11 @@
 
   // ==================== Configuration ====================
   const qs = new URLSearchParams(window.location.search);
+  const DEFAULT_ORGANIZATION = 'SnelStart';
+  const DEFAULT_PROJECT = 'SnelStart';
   const CONFIG = {
-    organization: qs.get('organization') || 'SnelStart',
-    project: qs.get('project') || 'SnelStart',
+    organization: qs.get('organization') || DEFAULT_ORGANIZATION,
+    project: qs.get('project') || DEFAULT_PROJECT,
     status: (qs.get('status') || 'Active'),
     groupBy: (qs.get('groupBy') || 'None'),
     draft: (qs.get('draft') || 'All'),
@@ -24,7 +26,9 @@
 
   const CONCURRENCY_LIMIT = 10;
   const PAT_STORAGE_KEY = 'azdo-pr-report-pat';
-  const DATA_CACHE_KEY = 'azdo-pr-report-cache:' + CONFIG.organization + '/' + CONFIG.project + '/' + CONFIG.status;
+  function dataCacheKey() {
+    return 'azdo-pr-report-cache:' + CONFIG.organization + '/' + CONFIG.project + '/' + CONFIG.status;
+  }
 
   const patGateEl = document.getElementById('patGate');
   const loadingPaneEl = document.getElementById('loadingPane');
@@ -35,7 +39,10 @@
   }
 
   // ==================== PAT gate ====================
-  document.getElementById('patOrgProjectLabel').textContent = CONFIG.organization + '/' + CONFIG.project;
+  function updatePatGateLabel() {
+    document.getElementById('patOrgProjectLabel').textContent = CONFIG.organization + '/' + CONFIG.project;
+  }
+  updatePatGateLabel();
 
   // If a PAT was supplied via ?pat=, capture it into sessionStorage so it
   // keeps working for the rest of this tab's session, then strip it from the
@@ -52,6 +59,21 @@
   }
   capturePatFromUrlIfPresent();
 
+  // Mirrors syncUrlToState()'s setOrDelete "omit when default" pattern, but
+  // lives at top-level scope since it must run outside/before renderReport
+  // (the gate's selector and startLoad both need it).
+  function updateProjectInUrl(project) {
+    const params = new URLSearchParams(window.location.search);
+    if (project && project !== DEFAULT_PROJECT) {
+      params.set('project', project);
+    } else {
+      params.delete('project');
+    }
+    const newQuery = params.toString();
+    const newUrl = window.location.pathname + (newQuery ? '?' + newQuery : '') + window.location.hash;
+    history.replaceState(null, '', newUrl);
+  }
+
   function getPat() {
     try { return sessionStorage.getItem(PAT_STORAGE_KEY) || null; } catch (e) { return null; }
   }
@@ -64,7 +86,7 @@
 
   function forgetPat() {
     try { sessionStorage.removeItem(PAT_STORAGE_KEY); } catch (e) { /* ignore */ }
-    try { sessionStorage.removeItem(DATA_CACHE_KEY); } catch (e) { /* ignore */ }
+    try { sessionStorage.removeItem(dataCacheKey()); } catch (e) { /* ignore */ }
     window.location.reload();
   }
 
@@ -83,6 +105,42 @@
     if (e.key === 'Enter') document.getElementById('patSubmit').click();
   });
   document.getElementById('forgetPatBtn').addEventListener('click', forgetPat);
+
+  // ---- Project selector (gate) ----
+  const projectSelectEl = document.getElementById('projectSelect');
+  // Seed with a single option equal to CONFIG.project before any fetch, so
+  // the dropdown always has a valid selection even if the PAT field is
+  // never touched or the project-list fetch never happens/fails.
+  populateProjectSelect(projectSelectEl, [CONFIG.project]);
+
+  document.getElementById('patInput').addEventListener('blur', () => {
+    const val = document.getElementById('patInput').value.trim();
+    if (!val) return;
+    ensureProjectList(val).then(names => {
+      if (names) populateProjectSelect(projectSelectEl, names);
+    });
+  });
+
+  projectSelectEl.addEventListener('change', () => {
+    CONFIG.project = projectSelectEl.value;
+    updatePatGateLabel();
+    updateProjectInUrl(CONFIG.project);
+  });
+
+  // ---- Project selector (report top bar) ----
+  const topBarProjectSelectEl = document.getElementById('topBarProjectSelect');
+  // Seed it the same way as the gate's selector so a project missing from
+  // the fetched list (e.g. a typo'd ?project=) is preserved as an extra
+  // option instead of silently dropped the first time it's populated.
+  populateProjectSelect(topBarProjectSelectEl, [CONFIG.project]);
+  topBarProjectSelectEl.addEventListener('change', () => {
+    CONFIG.project = topBarProjectSelectEl.value;
+    updatePatGateLabel();
+    updateProjectInUrl(CONFIG.project);
+    const pat = getPat();
+    if (!pat) { showOnly(patGateEl); return; }
+    startLoad(pat, { forceRefresh: false });
+  });
 
   // ==================== Azure DevOps API ====================
   function authHeader(pat) {
@@ -107,6 +165,66 @@
       throw new Error('POST ' + url + ' failed: ' + response.status + ' ' + response.statusText);
     }
     return response.json();
+  }
+
+  async function fetchProjects(pat) {
+    const uri = 'https://dev.azure.com/' + CONFIG.organization + '/_apis/projects?api-version=7.1&$top=100';
+    const response = await apiGet(uri, pat);
+    return (response.value || []).map(p => p.name);
+  }
+
+  // Caches the org's project list in memory only for this tab session (never
+  // persisted storage), and de-dupes concurrent callers (the gate's blur
+  // handler and startLoad can both want it) onto a single in-flight fetch.
+  // Keyed on the PAT that produced it, so a later call with a different PAT
+  // (e.g. the user retypes their token) refetches instead of silently
+  // reusing a list fetched under the old one.
+  let cachedProjectNames = null;
+  let cachedForPat = null;
+  let projectListPromise = null;
+  let projectListPromiseForPat = null;
+  async function ensureProjectList(pat) {
+    if (cachedProjectNames && cachedForPat === pat) return cachedProjectNames;
+    if (projectListPromise && projectListPromiseForPat === pat) return projectListPromise;
+    projectListPromiseForPat = pat;
+    projectListPromise = fetchProjects(pat)
+      .then(names => {
+        cachedProjectNames = names;
+        cachedForPat = pat;
+        return names;
+      })
+      .catch(() => {
+        return null;
+      })
+      .finally(() => {
+        projectListPromise = null;
+        projectListPromiseForPat = null;
+      });
+    return projectListPromise;
+  }
+
+  // Rebuilds selectEl's <option>s from `names` via document.createElement +
+  // textContent (not esc()/innerHTML -- this runs outside renderReport's
+  // closure), keeping the currently selected value selected even if it's
+  // absent from `names` (same defensive pattern as narrowSelectOptions
+  // further down, for a typo'd/renamed ?project=).
+  function populateProjectSelect(selectEl, names) {
+    const currentVal = selectEl.value;
+    const sorted = (names || []).slice().sort((a, b) => a.localeCompare(b));
+    selectEl.innerHTML = '';
+    sorted.forEach(name => {
+      const opt = document.createElement('option');
+      opt.value = name;
+      opt.textContent = name;
+      selectEl.appendChild(opt);
+    });
+    if (currentVal && !sorted.includes(currentVal)) {
+      const opt = document.createElement('option');
+      opt.value = currentVal;
+      opt.textContent = currentVal;
+      selectEl.appendChild(opt);
+    }
+    if (currentVal) selectEl.value = currentVal;
   }
 
   // Runs `items` through `worker` with at most `limit` in flight at once.
@@ -224,7 +342,7 @@
 
   function readCache() {
     try {
-      const raw = sessionStorage.getItem(DATA_CACHE_KEY);
+      const raw = sessionStorage.getItem(dataCacheKey());
       if (!raw) return null;
       return JSON.parse(raw);
     } catch (e) {
@@ -234,7 +352,7 @@
 
   function writeCache(prs) {
     try {
-      sessionStorage.setItem(DATA_CACHE_KEY, JSON.stringify({ fetchedAt: new Date().toISOString(), prs: prs }));
+      sessionStorage.setItem(dataCacheKey(), JSON.stringify({ fetchedAt: new Date().toISOString(), prs: prs }));
     } catch (e) { /* storage full or unavailable, ignore */ }
   }
 
@@ -327,7 +445,33 @@
   }
   const RECENT_THRESHOLD_TS = monthsAgoTs(3);
 
+  // Keeps both the gate's and the report top bar's project selectors in sync
+  // with CONFIG.project, using the in-memory-cached org project list when
+  // available and falling back to a single-option list (the current project)
+  // on fetch failure, so neither select is ever left with zero options.
+  async function syncProjectSelectors(pat) {
+    const names = await ensureProjectList(pat);
+    [document.getElementById('projectSelect'), document.getElementById('topBarProjectSelect')]
+      .filter(Boolean)
+      .forEach(selectEl => {
+        populateProjectSelect(selectEl, names || [CONFIG.project]);
+        selectEl.value = CONFIG.project;
+      });
+  }
+
+  // Reentrancy guard: CONFIG.project is shared mutable state, so a second
+  // startLoad (e.g. the user switches projects again in the top bar before
+  // the first switch has finished loading) must not run concurrently with
+  // one already in flight -- it could writeCache/renderReport after
+  // CONFIG.project has moved on, corrupting the wrong project's cache slot.
+  // Ignore the call rather than queue/cancel it; the selector's own change
+  // event already reflects the latest choice, and a subsequent user action
+  // (e.g. re-selecting once the first load completes) will trigger a fresh one.
+  let startLoadInFlight = false;
+
   async function startLoad(pat, opts) {
+    if (startLoadInFlight) return;
+    startLoadInFlight = true;
     opts = opts || {};
     const errEl = document.getElementById('patError');
     errEl.textContent = '';
@@ -346,12 +490,15 @@
         writeCache(prs);
       }
 
+      await syncProjectSelectors(pat);
       renderReport(prs);
       showOnly(reportRootEl);
     } catch (err) {
       showOnly(patGateEl);
       document.getElementById('patError').textContent = 'Failed to load pull requests:\n' + err.message +
         '\n\nCheck that the PAT is valid and has "Code (Read)" scope.';
+    } finally {
+      startLoadInFlight = false;
     }
   }
 
