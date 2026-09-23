@@ -563,22 +563,30 @@
     const AGE_QS_TO_DROPDOWN = { Recent: 'recent', Older: 'older', All: '' };
     const AGE_DROPDOWN_TO_QS = { recent: 'Recent', older: 'Older', '': 'All' };
 
+    // Reads from the *live* URL (not the page-load-time qs/CONFIG snapshot)
+    // so that re-rendering without a page reload -- e.g. after "Refresh data"
+    // -- picks up whatever filters are currently reflected in the URL instead
+    // of resetting them back to their load-time values.
     function readInitialStateFromUrl() {
-      const urlSort = qs.get('sort');
-      const urlSortDir = qs.get('sortDir');
+      const liveQs = new URLSearchParams(window.location.search);
+      const urlSort = liveQs.get('sort');
+      const urlSortDir = liveQs.get('sortDir');
+      const urlGroupBy = liveQs.get('groupBy') || 'None';
+      const urlDraft = liveQs.get('draft') || 'All';
+      const urlAge = liveQs.get('age') || 'Recent';
       return {
-        groupBy: VALID_GROUPBY.includes(CONFIG.groupBy) ? CONFIG.groupBy : 'None',
+        groupBy: VALID_GROUPBY.includes(urlGroupBy) ? urlGroupBy : 'None',
         sort: {
           key: VALID_SORT_KEYS.includes(urlSort) ? urlSort : 'created',
           dir: urlSortDir === 'asc' ? 'asc' : 'desc',
         },
-        user: qs.get('user') || '',
-        team: qs.get('team') || '',
-        tag: qs.get('tag') || '',
-        wiTeam: CONFIG.workItemTeam || '',
-        draft: Object.prototype.hasOwnProperty.call(DRAFT_QS_TO_DROPDOWN, CONFIG.draft) ? DRAFT_QS_TO_DROPDOWN[CONFIG.draft] : '',
-        approval: (qs.get('approval') === 'with' || qs.get('approval') === 'without') ? qs.get('approval') : '',
-        age: Object.prototype.hasOwnProperty.call(AGE_QS_TO_DROPDOWN, CONFIG.age) ? AGE_QS_TO_DROPDOWN[CONFIG.age] : 'recent',
+        user: liveQs.get('user') || '',
+        team: liveQs.get('team') || '',
+        tag: liveQs.get('tag') || '',
+        wiTeam: liveQs.get('workItemTeam') || '',
+        draft: Object.prototype.hasOwnProperty.call(DRAFT_QS_TO_DROPDOWN, urlDraft) ? DRAFT_QS_TO_DROPDOWN[urlDraft] : '',
+        approval: (liveQs.get('approval') === 'with' || liveQs.get('approval') === 'without') ? liveQs.get('approval') : '',
+        age: Object.prototype.hasOwnProperty.call(AGE_QS_TO_DROPDOWN, urlAge) ? AGE_QS_TO_DROPDOWN[urlAge] : 'recent',
       };
     }
 
