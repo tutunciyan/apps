@@ -391,45 +391,56 @@
 
     setLoadingProgress(90, 'Building report ...', '');
 
-    const prs = rawPrs.map(pr => {
-      const teamReviewers = (pr.reviewers || []).filter(r => r.isContainer).map(r => r.displayName);
-      const approvers = (pr.reviewers || []).filter(r => !r.isContainer && r.vote >= 5).map(r => r.displayName);
-      const linkedIds = workItemIdsByPr[pr.pullRequestId] || [];
-      const linkedWorkItems = linkedIds.map(wiId => {
-        const detail = workItemDetails[wiId];
-        return {
-          id: wiId,
-          title: detail ? detail.title : '',
-          type: detail ? detail.type : '',
-          team: detail ? detail.team : null,
-          tags: detail ? detail.tags : [],
-          url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_workitems/edit/' + wiId,
-        };
-      });
-      const workItemTeams = Array.from(new Set(linkedWorkItems.map(wi => wi.team).filter(Boolean)));
-      const workItemTags = Array.from(new Set(linkedWorkItems.flatMap(wi => wi.tags || [])));
-
-      return {
-        repository: pr.repository.name,
-        id: pr.pullRequestId,
-        title: pr.title,
-        status: statusText(pr.status),
-        createdBy: pr.createdBy.displayName,
-        teams: teamReviewers,
-        approvers: approvers,
-        tags: workItemTags,
-        workItems: linkedWorkItems.map(wi => ({ id: wi.id, title: wi.title, type: wi.type, url: wi.url })),
-        wiTeams: workItemTeams,
-        created: formatDate(new Date(pr.creationDate)),
-        createdTs: new Date(pr.creationDate).getTime(),
-        isDraft: !!pr.isDraft,
-        url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_git/' +
-          encodeURIComponent(pr.repository.name) + '/pullrequest/' + pr.pullRequestId,
-      };
-    });
+    const prs = rawPrs.map(pr => buildPrModel(pr, workItemIdsByPr[pr.pullRequestId] || [], workItemDetails));
 
     setLoadingProgress(100, 'Done.', '');
     return prs;
+  }
+
+  function buildPrModel(pr, linkedIds, workItemDetails) {
+    const teamReviewers = (pr.reviewers || []).filter(r => r.isContainer).map(r => r.displayName);
+    const approvers = (pr.reviewers || []).filter(r => !r.isContainer && r.vote >= 5).map(r => r.displayName);
+    const linkedWorkItems = linkedIds.map(wiId => {
+      const detail = workItemDetails[wiId];
+      return {
+        id: wiId,
+        title: detail ? detail.title : '',
+        type: detail ? detail.type : '',
+        team: detail ? detail.team : null,
+        tags: detail ? detail.tags : [],
+        url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_workitems/edit/' + wiId,
+      };
+    });
+    const workItemTeams = Array.from(new Set(linkedWorkItems.map(wi => wi.team).filter(Boolean)));
+    const workItemTags = Array.from(new Set(linkedWorkItems.flatMap(wi => wi.tags || [])));
+
+    return {
+      repository: pr.repository.name,
+      id: pr.pullRequestId,
+      title: pr.title,
+      status: statusText(pr.status),
+      createdBy: pr.createdBy.displayName,
+      teams: teamReviewers,
+      approvers: approvers,
+      tags: workItemTags,
+      workItems: linkedWorkItems.map(wi => ({ id: wi.id, title: wi.title, type: wi.type, url: wi.url })),
+      wiTeams: workItemTeams,
+      created: formatDate(new Date(pr.creationDate)),
+      createdTs: new Date(pr.creationDate).getTime(),
+      isDraft: !!pr.isDraft,
+      url: 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project + '/_git/' +
+        encodeURIComponent(pr.repository.name) + '/pullrequest/' + pr.pullRequestId,
+    };
+  }
+
+  // Re-fetches one PR and its linked work items and returns a fresh model.
+  async function loadSinglePr(prId, pat) {
+    const uri = 'https://dev.azure.com/' + CONFIG.organization + '/' + CONFIG.project +
+      '/_apis/git/pullrequests/' + prId + '?api-version=7.1';
+    const rawPr = await apiGet(uri, pat);
+    const ids = await fetchLinkedWorkItemIds(rawPr, pat);
+    const details = await fetchWorkItemDetailsBatch(ids, pat);
+    return buildPrModel(rawPr, ids, details);
   }
 
   function formatDate(d) {
@@ -520,7 +531,10 @@
       return d.innerHTML;
     }
 
-    const colgroup = "<colgroup><col style='width:5%'><col style='width:21%'><col style='width:7%'><col style='width:10%'><col style='width:11%'><col style='width:12%'><col style='width:12%'><col style='width:10%'><col style='width:12%'></colgroup>";
+    const colgroup = "<colgroup><col style='width:5%'><col style='width:19%'><col style='width:7%'><col style='width:10%'><col style='width:11%'><col style='width:12%'><col style='width:11%'><col style='width:10%'><col style='width:12%'><col style='width:3%'></colgroup>";
+
+    // PR ids whose per-row refresh is in flight; survives re-renders.
+    const refreshingPrIds = new Set();
 
     // CSS text-overflow:ellipsis isn't guaranteed to render "..." when the
     // clipped content is an inline-block pill rather than a text run, so
@@ -622,6 +636,8 @@
       row += "<td>" + clipCell(renderWorkItems(pr.workItems)) + "</td>";
       row += "<td>" + clipCell(renderApprovals(pr.approvers), (pr.approvers || []).join(', ')) + "</td>";
       row += "<td>" + clipCell(pr.created) + "</td>";
+      const busy = refreshingPrIds.has(pr.id);
+      row += "<td>" + clipCell("<button type='button' class='row-refresh" + (busy ? " busy" : "") + "' data-pr-id='" + pr.id + "' title='Refresh this pull request' aria-label='Refresh pull request " + pr.id + "'" + (busy ? " disabled" : "") + ">&#8635;</button>") + "</td>";
       row += "</tr>";
       return row;
     }
@@ -634,7 +650,7 @@
         const arrow = isActive ? (sort.dir === 'asc' ? '&#9650;' : '&#9660;') : '';
         html += "<th class='sortable' data-sort-key='" + col.key + "'>" + esc(col.label) + " <span class='sort-arrow'>" + arrow + "</span></th>";
       });
-      html += '</tr>';
+      html += '<th></th></tr>';
       return html;
     }
 
@@ -675,6 +691,10 @@
 
       container.innerHTML = html;
 
+      container.querySelectorAll('.row-refresh').forEach(btn => {
+        btn.addEventListener('click', () => refreshRow(Number(btn.getAttribute('data-pr-id'))));
+      });
+
       container.querySelectorAll('th.sortable').forEach(th => {
         th.addEventListener('click', () => {
           const key = th.getAttribute('data-sort-key');
@@ -689,6 +709,38 @@
           syncUrlToState();
         });
       });
+    }
+
+    // Refreshes just one PR: re-fetches it, swaps it into `prs`, updates the
+    // session cache, and re-renders (filters/sort/group live in the URL/DOM
+    // state, so they are preserved).
+    async function refreshRow(prId) {
+      if (refreshingPrIds.has(prId)) return;
+      const pat = getPat();
+      if (!pat) { showOnly(patGateEl); return; }
+      refreshingPrIds.add(prId);
+      render(currentGroupBy, currentSort);
+      applyFilters();
+      let failed = false;
+      try {
+        const fresh = await loadSinglePr(prId, pat);
+        const idx = prs.findIndex(p => p.id === prId);
+        if (idx !== -1) prs[idx] = fresh;
+        writeCache(prs);
+      } catch (e) {
+        failed = true;
+        console.error('Failed to refresh PR ' + prId, e);
+      } finally {
+        refreshingPrIds.delete(prId);
+      }
+      render(currentGroupBy, currentSort);
+      applyFilters();
+      if (failed) {
+        document.querySelectorAll(".row-refresh[data-pr-id='" + prId + "']").forEach(btn => {
+          btn.classList.add('error');
+          btn.title = 'Refresh failed - click to retry';
+        });
+      }
     }
 
     const userFilter = document.getElementById('userFilter');
