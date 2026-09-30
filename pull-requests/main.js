@@ -650,7 +650,7 @@
         const arrow = isActive ? (sort.dir === 'asc' ? '&#9650;' : '&#9660;') : '';
         html += "<th class='sortable' data-sort-key='" + col.key + "'>" + esc(col.label) + " <span class='sort-arrow'>" + arrow + "</span></th>";
       });
-      html += "<th><span class='cell-clip'><button type='button' class='row-refresh group-refresh' title='Refresh all shown pull requests in this group' aria-label='Refresh shown pull requests in this group'>&#8635;</button></span></th></tr>";
+      html += "<th></th></tr>";
       return html;
     }
 
@@ -683,7 +683,7 @@
       sortedKeys.forEach(key => {
         const groupPrs = sortPrs(groups.get(key), groupBy, sort);
         html += "<div class='repo-group' data-repo='" + esc(key) + "'>";
-        html += "<h2 class='repo'>" + esc(key) + " (<span class='repo-count'>" + groupPrs.length + "</span>)</h2>";
+        html += "<h2 class='repo'><span>" + esc(key) + " (<span class='repo-count'>" + groupPrs.length + "</span>)</span><button type='button' class='row-refresh group-refresh' title='Refresh all shown pull requests in this group' aria-label='Refresh shown pull requests in this group'>&#8635;</button></h2>";
         html += "<table>" + colgroup + renderHeaderRow(groupBy, sort);
         groupPrs.forEach(pr => { html += renderRow(pr, groupBy); });
         html += "</table></div>";
