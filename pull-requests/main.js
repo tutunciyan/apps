@@ -650,7 +650,7 @@
         const arrow = isActive ? (sort.dir === 'asc' ? '&#9650;' : '&#9660;') : '';
         html += "<th class='sortable' data-sort-key='" + col.key + "'>" + esc(col.label) + " <span class='sort-arrow'>" + arrow + "</span></th>";
       });
-      html += '<th></th></tr>';
+      html += "<th><span class='cell-clip'><button type='button' class='row-refresh group-refresh' title='Refresh all shown pull requests in this group' aria-label='Refresh shown pull requests in this group'>&#8635;</button></span></th></tr>";
       return html;
     }
 
@@ -691,9 +691,18 @@
 
       container.innerHTML = html;
 
-      container.querySelectorAll('.row-refresh').forEach(btn => {
-        btn.addEventListener('click', () => refreshRow(Number(btn.getAttribute('data-pr-id'))));
+      container.querySelectorAll('.row-refresh:not(.group-refresh)').forEach(btn => {
+        btn.addEventListener('click', () => refreshRows([Number(btn.getAttribute('data-pr-id'))]));
       });
+      container.querySelectorAll('.group-refresh').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const group = btn.closest('.repo-group');
+          const ids = Array.from(group.querySelectorAll('tr[data-user]:not(.hidden) .row-refresh'))
+            .map(b => Number(b.getAttribute('data-pr-id')));
+          refreshRows(ids);
+        });
+      });
+      updateGroupRefreshState();
 
       container.querySelectorAll('th.sortable').forEach(th => {
         th.addEventListener('click', () => {
@@ -711,36 +720,53 @@
       });
     }
 
-    // Refreshes just one PR: re-fetches it, swaps it into `prs`, updates the
-    // session cache, and re-renders (filters/sort/group live in the URL/DOM
-    // state, so they are preserved).
-    async function refreshRow(prId) {
-      if (refreshingPrIds.has(prId)) return;
+    // Spins a group header's button while any PR in that group is refreshing.
+    function updateGroupRefreshState() {
+      document.querySelectorAll('.repo-group').forEach(group => {
+        const btn = group.querySelector('.group-refresh');
+        if (!btn) return;
+        const busy = Array.from(group.querySelectorAll('tr[data-user] .row-refresh'))
+          .some(b => refreshingPrIds.has(Number(b.getAttribute('data-pr-id'))));
+        btn.classList.toggle('busy', busy);
+        btn.disabled = busy;
+      });
+    }
+
+    // Refreshes the given PRs (one row, or every shown row of a group):
+    // re-fetches each, swaps it into `prs`, updates the session cache, and
+    // re-renders (filters/sort/group live in the URL/DOM state, so they are
+    // preserved).
+    async function refreshRows(prIds) {
       const pat = getPat();
       if (!pat) { showOnly(patGateEl); return; }
-      refreshingPrIds.add(prId);
+      const ids = prIds.filter(id => !refreshingPrIds.has(id));
+      if (ids.length === 0) return;
+      ids.forEach(id => refreshingPrIds.add(id));
       render(currentGroupBy, currentSort);
       applyFilters();
-      let failed = false;
-      try {
-        const fresh = await loadSinglePr(prId, pat);
-        const idx = prs.findIndex(p => p.id === prId);
-        if (idx !== -1) prs[idx] = fresh;
-        writeCache(prs);
-      } catch (e) {
-        failed = true;
-        console.error('Failed to refresh PR ' + prId, e);
-      } finally {
-        refreshingPrIds.delete(prId);
-      }
+      const failedIds = new Set();
+      runWithConcurrency.onProgress = null;
+      await runWithConcurrency(ids, CONCURRENCY_LIMIT, async (prId) => {
+        try {
+          const fresh = await loadSinglePr(prId, pat);
+          const idx = prs.findIndex(p => p.id === prId);
+          if (idx !== -1) prs[idx] = fresh;
+        } catch (e) {
+          failedIds.add(prId);
+          console.error('Failed to refresh PR ' + prId, e);
+        } finally {
+          refreshingPrIds.delete(prId);
+        }
+      });
+      writeCache(prs);
       render(currentGroupBy, currentSort);
       applyFilters();
-      if (failed) {
+      failedIds.forEach(prId => {
         document.querySelectorAll(".row-refresh[data-pr-id='" + prId + "']").forEach(btn => {
           btn.classList.add('error');
           btn.title = 'Refresh failed - click to retry';
         });
-      }
+      });
     }
 
     const userFilter = document.getElementById('userFilter');
